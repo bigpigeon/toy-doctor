@@ -58,7 +58,6 @@ func NotMatch() {
 		OrderBy(unsafe.Offsetof(Product{}.Name)).Enter().
 		OrderBy(unsafe.Offsetof(User{}.ID))
 
-	// assign indent test
 	brick := toy.Model(&Product{})
 	brick = brick.OrderBy(unsafe.Offsetof(Product{}.Name)).Preload(unsafe.Offsetof(Product{}.Detail))
 
@@ -66,4 +65,13 @@ func NotMatch() {
 	brick.OrderBy(unsafe.Offsetof(Product{}.Name))
 	brick2 := brick
 	brick2.OrderBy(unsafe.Offsetof(Product{}.Name))
+	var stuffData struct {
+		Brick *toyorm.ToyBrick
+	}
+	stuffData.Brick = brick.Debug()
+	stuffData.Brick.OrderBy(unsafe.Offsetof(Product{}.Name))
+
+	// var field error
+	var varBrick = brick.Debug()
+	varBrick.OrderBy(unsafe.Offsetof(Product{}.Name))
 }

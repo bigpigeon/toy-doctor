@@ -1,9 +1,20 @@
-/*
- * Copyright 2018. bigpigeon. All rights reserved.
- * Use of this source code is governed by a MIT style
- * license that can be found in the LICENSE file.
- */
+# Toy-Doctor
 
+use to check toyorm syntax error in go project
+
+### Install
+
+    go get -u github.com/bigpigeon/toyorm
+
+### Usage
+
+    toy-doctor [directory]
+    toy-doctor file1, file2 ...
+
+### Example
+
+some code in main.go
+```golang
 package main
 
 import (
@@ -36,7 +47,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if err := result.Err(); err != nil {
+	if err := result.Err();err != nil {
 		// sql error record it
 	}
 	// have error
@@ -45,7 +56,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if err := result.Err(); err != nil {
+	if err := result.Err();err != nil {
 		// sql error record it
 	}
 }
+```
+
+use toy-doctor to check it's error
+
+    toy-doctor main.go
+	// Output:
+	// main.go:37:33 type must same as main.go:20:6

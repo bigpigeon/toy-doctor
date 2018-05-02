@@ -16,6 +16,13 @@ import (
 	"path/filepath"
 )
 
+func Usage() {
+	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "\ttoy-doctor [directory]\n")
+	fmt.Fprintf(os.Stderr, "\ttoy-doctor files... # Must be a single package\n")
+	flag.PrintDefaults()
+}
+
 func Main(args []string) {
 	if len(args) == 0 {
 		// Default: process whole package in current directory.
@@ -71,6 +78,7 @@ func isDirectory(name string) bool {
 }
 
 func main() {
+	flag.Usage = Usage
 	flag.Parse()
 	args := flag.Args()
 	Main(args)

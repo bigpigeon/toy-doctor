@@ -98,40 +98,75 @@ func (w *Walker) cacheToyorm(spec *ast.ImportSpec) {
 	}
 }
 
-//func cacheBrickVar(spec *ast.ValueSpec) {
-//
-//}
-//
-//func cacheBrickAssign(stmt *ast.AssignStmt) {
-//
-//}
-
-func (w *Walker) cacheBrickIdent(stmt *ast.AssignStmt) {
-	toyBrickType := w.ToyModel.Type().(*types.Signature).Results().At(0).Type()
-	for i := range stmt.Lhs {
-		// check ident is toyorm.ToyBrick
-		// if lhs[i] is ToyBrick
-		if lhIdent, ok := stmt.Lhs[i].(*ast.Ident); ok {
-			// token is =, obj in w.Info.User, otherwise in w.Info.Defs
-			var lhObj types.Object
-			if obj, ok := w.Info.Uses[lhIdent]; ok && obj.Type().String() == toyBrickType.String() {
-				lhObj = obj
-			} else if obj, ok := w.Info.Defs[lhIdent]; ok && obj != nil && obj.Type().String() == toyBrickType.String() {
-				lhObj = obj
+func (w *Walker) getIdentMapWithBrickVar(spec *ast.ValueSpec) {
+	// ident only map one result call expr or other ident
+	identMap := map[*ast.Ident]ast.Expr{}
+	// j use to index rhs
+	j := 0
+	for i := range spec.Values {
+		switch x := spec.Values[i].(type) {
+		case *ast.CallExpr:
+			if sign, ok := w.Info.Types[x.Fun].Type.(*types.Signature); ok {
+				if sign.Results().Len() == 1 {
+					identMap[spec.Names[i]] = x
+				}
+				j += sign.Results().Len()
 			}
-			if lhObj != nil && len(stmt.Rhs) > i {
-				// if rhs is ToyBrick Chain function
-				if call, ok := stmt.Rhs[i].(*ast.CallExpr); ok && w.Info.Types[call].Type.String() == toyBrickType.String() {
-					w.checkCallExpr(call)
-					if ctx, ok := w.BrickCallCache[call]; ok {
-						w.BrickIdentCache[lhObj] = ctx
-					}
+		default:
+			identMap[spec.Names[i]] = x
+			j++
+		}
+	}
+	w.cacheBrickIdent(identMap)
+}
 
-				} else if ident := getIdent(stmt.Rhs[i]); ident != nil {
-					// if rhs is other *ToyBrick
-					if ctx, ok := w.BrickIdentCache[w.Info.Uses[ident]]; ok {
-						w.BrickIdentCache[lhObj] = ctx
+func (w *Walker) getIdentMapWIthBrickAssign(stmt *ast.AssignStmt) {
+	// ident only map one result call expr or other ident
+	identMap := map[*ast.Ident]ast.Expr{}
+	// j use to index rhs
+	j := 0
+	for i := range stmt.Rhs {
+		switch x := stmt.Rhs[i].(type) {
+		case *ast.CallExpr:
+			if sign, ok := w.Info.Types[x.Fun].Type.(*types.Signature); ok {
+				if sign.Results().Len() == 1 {
+					if lhIdent := getIdent(stmt.Lhs[i]); lhIdent != nil {
+						identMap[lhIdent] = x
 					}
+				}
+				j += sign.Results().Len()
+			}
+		default:
+			if lhIdent := getIdent(stmt.Lhs[i]); lhIdent != nil {
+				identMap[lhIdent] = x
+			}
+			j++
+		}
+	}
+	w.cacheBrickIdent(identMap)
+}
+
+func (w *Walker) cacheBrickIdent(identMap map[*ast.Ident]ast.Expr) {
+	toyBrickType := w.ToyModel.Type().(*types.Signature).Results().At(0).Type()
+	for lhIdent, expr := range identMap {
+		// token is =, obj in w.Info.User, otherwise in w.Info.Defs
+		var lhObj types.Object
+		if obj, ok := w.Info.Uses[lhIdent]; ok && obj.Type().String() == toyBrickType.String() {
+			lhObj = obj
+		} else if obj, ok := w.Info.Defs[lhIdent]; ok && obj != nil && obj.Type().String() == toyBrickType.String() {
+			lhObj = obj
+		}
+		if lhObj != nil {
+			// if rhs is ToyBrick Chain function
+			if call, ok := expr.(*ast.CallExpr); ok && w.Info.Types[call].Type.String() == toyBrickType.String() {
+				w.checkCallExpr(call)
+				if ctx, ok := w.BrickCallCache[call]; ok {
+					w.BrickIdentCache[lhObj] = ctx
+				}
+			} else if ident := getIdent(expr); ident != nil {
+				// if rhs is other *ToyBrick
+				if ctx, ok := w.BrickIdentCache[w.Info.Uses[ident]]; ok {
+					w.BrickIdentCache[lhObj] = ctx
 				}
 			}
 		}
@@ -289,20 +324,13 @@ func (w *Walker) checkCallExpr(call *ast.CallExpr) TypesStructList {
 		// TODO for the declarations
 		// method := brick.Limit
 		// method(2)
-		// try to trace method ident assign value
-
-		//if x.Obj != nil {
-		//	if xIdent, ok := x.Obj.Decl.(*ast.Ident); ok {
-		//		ctx = w.BrickIdentCache[xIdent]
-		//	}
-		//}
 
 		// for the declarations
 		// toy := ToyOpen("sqlite3", "")
 		// brick = toy.Model(&Product{}).Debug.Where()...
 		if selCall, ok := sel.X.(*ast.CallExpr); ok {
 			ctx = w.checkCallExpr(selCall)
-		} else if selIdent, ok := sel.X.(*ast.Ident); ok {
+		} else if selIdent := getIdent(sel.X); selIdent != nil {
 			ctx = w.BrickIdentCache[w.Info.Uses[selIdent]]
 		}
 
@@ -440,8 +468,10 @@ func (w *Walker) Visit(node ast.Node) ast.Visitor {
 	//if x.Tok != token.IMPORT {
 	//	return nil
 	//}
+	case *ast.ValueSpec:
+		w.getIdentMapWithBrickVar(x)
 	case *ast.AssignStmt:
-		w.cacheBrickIdent(x)
+		w.getIdentMapWIthBrickAssign(x)
 	case *ast.CallExpr:
 		w.checkCallExpr(x)
 	case *ast.BlockStmt:
