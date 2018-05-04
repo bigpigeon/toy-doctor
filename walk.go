@@ -14,6 +14,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"sort"
 )
 
@@ -48,6 +49,7 @@ func (e ErrInvalidStructField) Error() string {
 
 type Walker struct {
 	FS              *token.FileSet
+	Pkg             *types.Package
 	Toyorm          bool
 	BrickIdentCache map[types.Object]TypesStructList
 	BrickCallCache  map[*ast.CallExpr]TypesStructList
@@ -67,6 +69,7 @@ type Walker struct {
 	// type wtih toyorm.FieldSelection
 	TypFieldSelection types.Type
 
+	AllExpr     map[ast.Expr]struct{}
 	CheckedExpr map[ast.Expr]struct{}
 	ErrorExpr   map[ast.Expr][]error
 
@@ -110,6 +113,32 @@ func (w *Walker) Report() string {
 		}
 	}
 	return s
+}
+
+func (w *Walker) reportCover(profilename string) {
+	f, err := os.Create(profilename)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	// only support set mode
+	fmt.Fprintf(f, "mode: set\n")
+	for expr := range w.AllExpr {
+		pos := w.FS.Position(expr.Pos())
+		end := w.FS.Position(expr.End())
+		_, ok := w.CheckedExpr[expr]
+		_, err = fmt.Fprintf(f, "%s:%d.%d,%d.%d %d %d\n",
+			joinPoint(w.Pkg.Path(), pos.Filename), pos.Line, pos.Column, end.Line, end.Column, 1, b2i(ok))
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func (w *Walker) cacheToyorm(spec *ast.ImportSpec) {
@@ -331,6 +360,12 @@ func (w *Walker) getFieldSelection(call *ast.CallExpr) []ast.Expr {
 	return args
 }
 
+func (w *Walker) markExpr(args ...ast.Expr) {
+	for _, arg := range args {
+		w.AllExpr[arg] = struct{}{}
+	}
+}
+
 // to check brick chain syntax
 // output error when chain model different source model
 // error e.g brick.Model(Product{}).OrderBy(Offsetof(User{}.Data))
@@ -367,16 +402,24 @@ func (w *Walker) checkCallExpr(call *ast.CallExpr) TypesStructList {
 				}
 				ctx = append(ctx.Copy(), sType)
 			}
-		} else if len(ctx) > 0 {
+		} else {
 			if w.IsBrickChain(methodObj) {
-				w.ArgsCheck(ctx[len(ctx)-1], w.getFieldSelection(call)...)
+				args := w.getFieldSelection(call)
+				w.markExpr(args...)
+				if len(ctx) > 0 {
+					w.ArgsCheck(ctx[len(ctx)-1], args...)
+				}
 			} else if w.ToyChainPreload.String() == methodObj.String() || w.ToyChainJoin.String() == methodObj.String() {
-				w.ArgsCheck(ctx[len(ctx)-1], w.getFieldSelection(call)...)
-				// check Preload field type
-				if fieldStruct := w.checkStructField(call.Args[0], ctx[len(ctx)-1].Underlying().(*types.Struct)); fieldStruct != nil {
-					ctx = append(ctx.Copy(), fieldStruct)
-				} else {
-					ctx = nil
+				args := w.getFieldSelection(call)
+				w.markExpr(args...)
+				if len(ctx) > 0 {
+					w.ArgsCheck(ctx[len(ctx)-1], args...)
+					// check Preload field type
+					if fieldStruct := w.checkStructField(call.Args[0], ctx[len(ctx)-1].Underlying().(*types.Struct)); fieldStruct != nil {
+						ctx = append(ctx.Copy(), fieldStruct)
+					} else {
+						ctx = nil
+					}
 				}
 			} else if len(ctx) > 1 {
 				if w.ToyChainEnter.String() == methodObj.String() || w.ToyChainSwap.String() == methodObj.String() {
@@ -472,12 +515,14 @@ func NewWalker(fileSet *token.FileSet, path string, files []*ast.File, verbose b
 			Scopes:     map[ast.Node]*types.Scope{},
 			Defs:       make(map[*ast.Ident]types.Object),
 		},
+		AllExpr:     map[ast.Expr]struct{}{},
 		CheckedExpr: map[ast.Expr]struct{}{},
 		ErrorExpr:   map[ast.Expr][]error{},
 		Verbose:     verbose,
 	}
 	config := types.Config{Importer: importer.For("source", nil), FakeImportC: true}
-	_, err := config.Check(path, walker.FS, walker.Files, walker.Info)
+	var err error
+	walker.Pkg, err = config.Check(path, walker.FS, walker.Files, walker.Info)
 	if err != nil {
 		return nil, err
 	}

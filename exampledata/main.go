@@ -23,6 +23,18 @@ type Product struct {
 	Detail *Detail
 }
 
+func Foo(brick *toyorm.ToyBrick) {
+	brick.OrderBy(Offsetof(Product{}.CreatedAt)).Preload(Offsetof(Product{}.Detail)).Enter()
+	var tab []Product
+	result, err := brick.Find(&tab)
+	if err != nil {
+		panic(err)
+	}
+	if err := result.Err(); err != nil {
+		// sql error record it
+	}
+}
+
 func main() {
 	toy, err := toyorm.Open("sqlite3", "")
 	if err != nil {

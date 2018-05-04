@@ -19,6 +19,8 @@ use to check toyorm syntax error in go project
 toy-doctor [flags] [directory]
 toy-doctor [flags] files... # Must be a single package
 Flags:
+  -coverprofile string
+    Write a coverage profile to the file after all check have done.
   -verbose
     print verbose log
 ```

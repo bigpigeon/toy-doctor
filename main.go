@@ -17,7 +17,8 @@ import (
 )
 
 var (
-	verbose = flag.Bool("verbose", false, "print verbose log")
+	verbose      = flag.Bool("verbose", false, "print verbose log")
+	coverProfile = flag.String("coverprofile", "", "Write a coverage profile to the file after all check have done.")
 )
 
 func Usage() {
@@ -72,6 +73,9 @@ func Main(args []string) {
 		ast.Walk(walk, file)
 	}
 	fmt.Println(walk.Report())
+	if *coverProfile != "" {
+		walk.reportCover(*coverProfile)
+	}
 }
 
 func isDirectory(name string) bool {

@@ -13,6 +13,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"path/filepath"
 	"reflect"
 	"strings"
 )
@@ -153,4 +154,18 @@ func main(){
 	methodList = append(methodList, "_ = brick.And")
 	src = fmt.Sprintf(src, strings.Join(methodList, "\n\t\t"))
 	return src
+}
+
+func joinPoint(dir, name string) string {
+	if dir == "." || dir == "./" {
+		return "./" + filepath.Join("", name)
+	}
+	return filepath.Join(dir, name)
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
