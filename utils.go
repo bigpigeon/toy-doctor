@@ -131,7 +131,7 @@ func main(){
 	_ = brick.Enter
 	// join
 	_ = brick.Join
-	// Swap
+	// swap
 	_ = brick.Swap
 	// offsetof
 	_ = unsafe.Offsetof(Product{}.ID)
