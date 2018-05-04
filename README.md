@@ -81,3 +81,9 @@ use toy-doctor to check it's error
     toy-doctor main.go
 	// Output:
 	// main.go:37:33 type must same as main.go:20:6
+
+generate coverprofile
+
+    toy-doctor -coverprofile=a.out main.go
+    // view corverage in browser
+    go tool cover -html=a.out
