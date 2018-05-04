@@ -10,14 +10,18 @@ use to check toyorm syntax error in go project
 
     go-1.10
     go-1.9
-    
+
 ### BUG
     go-1.9 have error when package import "github.com/mattn/go-sqlite3", need remove it temporarily
 
 ### Usage
-
-    toy-doctor [directory]
-    toy-doctor file1, file2 ...
+```
+toy-doctor [flags] [directory]
+toy-doctor [flags] files... # Must be a single package
+Flags:
+  -verbose
+    print verbose log
+```
 
 ### Example
 
