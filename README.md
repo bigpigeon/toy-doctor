@@ -6,6 +6,14 @@ use to check toyorm syntax error in go project
 
     go get -u github.com/bigpigeon/toyorm
 
+### Go version
+
+    go-1.10
+    go-1.9
+    
+### BUG
+    go-1.9 have error when package import "github.com/mattn/go-sqlite3", need remove it temporarily
+
 ### Usage
 
     toy-doctor [directory]
