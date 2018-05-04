@@ -67,7 +67,7 @@ func main(){
 		}
 		return true
 	})
-	assert.Equal(t, pNum, 5)
+	assert.Equal(t, pNum, 4)
 }
 
 func TestGetStructFields(t *testing.T) {

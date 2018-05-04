@@ -13,5 +13,5 @@ func ExampleCheck() {
 	}
 	Main(args)
 	// Output:
-	// exampledata/main.go:37:33 type must same as exampledata/main.go:20:6
+	// 	exampledata/main.go:43:33 type must same as exampledata/main.go:20:6
 }

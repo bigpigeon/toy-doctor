@@ -47,7 +47,7 @@ func NotMatch() {
 	_ = toy.Model(&Product{}).Debug().OrderBy("NotExistData", "NotExistTime")
 	_ = toy.Model(&Product{}).Debug().Preload(unsafe.Offsetof(Product{}.Name))
 	_ = toy.Model(&Product{}).Debug().Preload(unsafe.Offsetof(Detail{}.Data))
-	//_ = toy.Model(&Product{}).Debug().Where("=", unsafe.Offsetof(Detail{}.Data), "pigeon")
+	_ = toy.Model(&Product{}).Debug().Where("=", unsafe.Offsetof(Detail{}.Data), "pigeon")
 
 	// join/enter
 	_ = toy.Model(&Product{}).Debug().Preload(unsafe.Offsetof(Product{}.Users)).

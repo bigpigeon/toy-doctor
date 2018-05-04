@@ -16,10 +16,15 @@ import (
 	"path/filepath"
 )
 
+var (
+	verbose = flag.Bool("verbose", false, "print verbose log")
+)
+
 func Usage() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "\ttoy-doctor [directory]\n")
-	fmt.Fprintf(os.Stderr, "\ttoy-doctor files... # Must be a single package\n")
+	fmt.Fprint(os.Stderr, "\ttoy-doctor [flags] [directory]\n")
+	fmt.Fprint(os.Stderr, "\ttoy-doctor [flags] files... # Must be a single package\n")
+	fmt.Fprint(os.Stderr, "Flags:\n")
 	flag.PrintDefaults()
 }
 
@@ -59,7 +64,7 @@ func Main(args []string) {
 			files = append(files, f)
 		}
 	}
-	walk, err = NewWalker(fs, dir, files)
+	walk, err = NewWalker(fs, dir, files, *verbose)
 	if err != nil {
 		panic(err)
 	}

@@ -19,7 +19,7 @@ func TestWalkInit(t *testing.T) {
 	fs := token.NewFileSet()
 	file, err := parser.ParseFile(fs, "src.go", src, 0|parser.ParseComments)
 	assert.Nil(t, err)
-	walk, err := NewWalker(fs, ".", []*ast.File{file})
+	walk, err := NewWalker(fs, ".", []*ast.File{file}, true)
 	if err != nil {
 		panic(err)
 	}
@@ -93,9 +93,8 @@ func TestWalk(t *testing.T) {
 	fs := token.NewFileSet()
 	file, err := parser.ParseFile(fs, "testdata/struct_notmatch.go", nil, 0)
 	assert.Nil(t, err)
-	walk, err := NewWalker(fs, ".", []*ast.File{file})
+	walk, err := NewWalker(fs, ".", []*ast.File{file}, true)
 	assert.Nil(t, err)
 	ast.Walk(walk, file)
-
 	t.Logf("\n%s\n", walk.Report())
 }

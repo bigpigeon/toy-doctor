@@ -14,6 +14,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"sort"
 )
 
 type ErrDifferentStruct struct {
@@ -50,7 +51,6 @@ type Walker struct {
 	Toyorm          bool
 	BrickIdentCache map[types.Object]TypesStructList
 	BrickCallCache  map[*ast.CallExpr]TypesStructList
-	Error           *[]error
 	Files           []*ast.File
 	Info            *types.Info
 	// Toy.Model method
@@ -66,8 +66,11 @@ type Walker struct {
 	TypOffsetof *types.Builtin
 	// type wtih toyorm.FieldSelection
 	TypFieldSelection types.Type
-	// some reason lead to ignore BrickChain
-	Ignore map[*ast.Expr]struct{}
+
+	CheckedExpr map[ast.Expr]struct{}
+	ErrorExpr   map[ast.Expr][]error
+
+	Verbose bool
 }
 
 // copy not copy
@@ -85,9 +88,26 @@ func (w *Walker) copy() *Walker {
 }
 
 func (w *Walker) Report() string {
+	// sort expr by position
+	var exprs []ast.Expr
+	for expr := range w.CheckedExpr {
+		exprs = append(exprs, expr)
+	}
+	sort.Slice(exprs, func(i, j int) bool {
+		return exprs[i].Pos() < exprs[j].Pos()
+	})
 	s := ""
-	for _, e := range *w.Error {
-		s += fmt.Sprintf("%s\n", e.Error())
+	for _, e := range exprs {
+		if w.Verbose {
+			if len(w.ErrorExpr[e]) != 0 {
+				s += fmt.Sprintf("%s has error:\n", w.FS.Position(e.Pos()))
+			} else {
+				s += fmt.Sprintf("%s ok\n", w.FS.Position(e.Pos()))
+			}
+		}
+		for _, err := range w.ErrorExpr[e] {
+			s += fmt.Sprintf("\t%s\n", err)
+		}
 	}
 	return s
 }
@@ -184,20 +204,21 @@ func (w *Walker) IsBrickChain(obj types.Object) bool {
 // e.g
 // brick := toy.Model(Product{}).Preload(Offsetof(Product{}.Detail))  ............ ok, Preload struct same as Model struct
 // brick := toy.Model(Product{}).Preload(Offsetof(User{}.Detail)) ................ error, Preload struct not match Model struct
-func (w *Walker) ArgsOffsetofCheck(mType *types.Named, args ...ast.Expr) {
+func (w *Walker) ArgsCheck(mType *types.Named, args ...ast.Expr) {
 	for _, expr := range args {
 		switch x := expr.(type) {
 		case *ast.CompositeLit:
 			if _, ok := x.Type.(*ast.MapType); ok {
-				w.ArgsOffsetofCheck(mType, x.Elts...)
+				w.ArgsCheck(mType, x.Elts...)
 			}
 		case *ast.KeyValueExpr:
-			w.ArgsOffsetofCheck(mType, x.Key)
+			w.ArgsCheck(mType, x.Key)
 		case *ast.BasicLit:
 			if x.Kind == token.STRING {
+				w.CheckedExpr[x] = struct{}{}
 				fieldMap, err := getStructFieldMap(mType.Underlying().(*types.Struct), w.FS)
 				if err != nil {
-					*w.Error = append(*w.Error, err)
+					w.ErrorExpr[x] = append(w.ErrorExpr[x], err)
 					break
 				}
 				var name string
@@ -207,7 +228,7 @@ func (w *Walker) ArgsOffsetofCheck(mType *types.Named, args ...ast.Expr) {
 					panic(err)
 				}
 				if _, ok := fieldMap[name]; ok == false {
-					*w.Error = append(*w.Error, ErrInvalidField{w.FS, mType, expr})
+					w.ErrorExpr[x] = append(w.ErrorExpr[x], ErrInvalidField{w.FS, mType, expr})
 				}
 			}
 		case *ast.CallExpr:
@@ -222,10 +243,11 @@ func (w *Walker) ArgsOffsetofCheck(mType *types.Named, args ...ast.Expr) {
 
 			if ok {
 				if obj.String() == w.TypOffsetof.String() {
+					w.CheckedExpr[x] = struct{}{}
 					arg := x.Args[0]
 					cType := getTypesStruct(w.Info.Types[arg.(*ast.SelectorExpr).X].Type)
 					if cType != mType {
-						*w.Error = append(*w.Error, ErrDifferentStruct{w.FS, mType, arg})
+						w.ErrorExpr[x] = append(w.ErrorExpr[x], ErrDifferentStruct{w.FS, mType, arg})
 					}
 				}
 			}
@@ -246,18 +268,20 @@ func (w *Walker) checkStructField(field ast.Expr, current *types.Struct) *types.
 			obj, ok = w.Info.Uses[y]
 		}
 		if ok && w.TypOffsetof.String() == obj.String() {
+			w.CheckedExpr[x] = struct{}{}
 			arg := x.Args[0].(*ast.SelectorExpr)
 			if structType := getTypesStruct(w.Info.Selections[arg].Type()); structType != nil {
 				return structType
 			}
-			*w.Error = append(*w.Error, ErrInvalidStructField{w.FS, arg.Sel})
+			w.ErrorExpr[x] = append(w.ErrorExpr[x], ErrInvalidStructField{w.FS, arg.Sel})
 		}
 
 	case *ast.BasicLit:
 		if x.Kind == token.STRING {
+			w.CheckedExpr[x] = struct{}{}
 			fieldMap, err := getStructFieldMap(current, w.FS)
 			if err != nil {
-				*w.Error = append(*w.Error, err)
+				w.ErrorExpr[x] = append(w.ErrorExpr[x], err)
 				return nil
 			}
 			var name string
@@ -271,7 +295,7 @@ func (w *Walker) checkStructField(field ast.Expr, current *types.Struct) *types.
 					return structType
 				}
 			}
-			*w.Error = append(*w.Error, ErrInvalidStructField{w.FS, x})
+			w.ErrorExpr[x] = append(w.ErrorExpr[x], ErrInvalidStructField{w.FS, x})
 		}
 	}
 	return nil
@@ -345,9 +369,9 @@ func (w *Walker) checkCallExpr(call *ast.CallExpr) TypesStructList {
 			}
 		} else if len(ctx) > 0 {
 			if w.IsBrickChain(methodObj) {
-				w.ArgsOffsetofCheck(ctx[len(ctx)-1], w.getFieldSelection(call)...)
+				w.ArgsCheck(ctx[len(ctx)-1], w.getFieldSelection(call)...)
 			} else if w.ToyChainPreload.String() == methodObj.String() || w.ToyChainJoin.String() == methodObj.String() {
-				w.ArgsOffsetofCheck(ctx[len(ctx)-1], w.getFieldSelection(call)...)
+				w.ArgsCheck(ctx[len(ctx)-1], w.getFieldSelection(call)...)
 				// check Preload field type
 				if fieldStruct := w.checkStructField(call.Args[0], ctx[len(ctx)-1].Underlying().(*types.Struct)); fieldStruct != nil {
 					ctx = append(ctx.Copy(), fieldStruct)
@@ -436,7 +460,7 @@ func (w *Walker) Init() error {
 	return nil
 }
 
-func NewWalker(fileSet *token.FileSet, path string, files []*ast.File) (*Walker, error) {
+func NewWalker(fileSet *token.FileSet, path string, files []*ast.File, verbose bool) (*Walker, error) {
 	walker := &Walker{
 		FS:             fileSet,
 		Files:          files,
@@ -448,7 +472,9 @@ func NewWalker(fileSet *token.FileSet, path string, files []*ast.File) (*Walker,
 			Scopes:     map[ast.Node]*types.Scope{},
 			Defs:       make(map[*ast.Ident]types.Object),
 		},
-		Error: new([]error),
+		CheckedExpr: map[ast.Expr]struct{}{},
+		ErrorExpr:   map[ast.Expr][]error{},
+		Verbose:     verbose,
 	}
 	config := types.Config{Importer: importer.For("source", nil), FakeImportC: true}
 	_, err := config.Check(path, walker.FS, walker.Files, walker.Info)
@@ -477,6 +503,5 @@ func (w *Walker) Visit(node ast.Node) ast.Visitor {
 	case *ast.BlockStmt:
 		return w.copy()
 	}
-
 	return w
 }
