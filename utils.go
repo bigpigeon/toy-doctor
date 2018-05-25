@@ -104,6 +104,8 @@ func (l TypesStructList) Copy() TypesStructList {
 
 func standardSrc() string {
 	brickType := reflect.TypeOf(&toyorm.ToyBrick{})
+	brickOrType := reflect.TypeOf((&toyorm.ToyBrick{}).Or())
+	brickAndType := reflect.TypeOf((&toyorm.ToyBrick{}).And())
 	src := `
 package main
 import "github.com/bigpigeon/toyorm"
@@ -136,6 +138,7 @@ func main(){
 	_ = brick.Swap
 	// offsetof
 	_ = unsafe.Offsetof(Product{}.ID)
+
 	
 }
 `
@@ -151,7 +154,19 @@ func main(){
 		}
 	}
 	methodList = append(methodList, "_ = brick.Or")
+	for i := 0; i < brickOrType.NumMethod(); i++ {
+		method := brickOrType.Method(i)
+		if method.Type.NumOut() == 1 && method.Type.Out(0) == brickType {
+			methodList = append(methodList, fmt.Sprintf("_ = brick.Or().%s", method.Name))
+		}
+	}
 	methodList = append(methodList, "_ = brick.And")
+	for i := 0; i < brickAndType.NumMethod(); i++ {
+		method := brickAndType.Method(i)
+		if method.Type.NumOut() == 1 && method.Type.Out(0) == brickType {
+			methodList = append(methodList, fmt.Sprintf("_ = brick.And().%s", method.Name))
+		}
+	}
 	src = fmt.Sprintf(src, strings.Join(methodList, "\n\t\t"))
 	return src
 }

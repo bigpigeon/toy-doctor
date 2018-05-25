@@ -74,4 +74,20 @@ func NotMatch() {
 	// var field error
 	var varBrick = brick.Debug()
 	varBrick.OrderBy(unsafe.Offsetof(Product{}.Name))
+
+	// or brick
+	_ = toy.Model(&Product{}).Debug().Where("=", unsafe.Offsetof(Product{}.Name), "pigeon").Or().
+		Condition("=", unsafe.Offsetof(Product{}.Name), "bigpigeon")
+
+	// or brick error
+	_ = toy.Model(&Product{}).Debug().Where("=", unsafe.Offsetof(Product{}.Name), "pigeon").Or().
+		Condition("=", unsafe.Offsetof(Detail{}.Data), "bigpigeon")
+
+	// and brick
+	_ = toy.Model(&Product{}).Debug().Where("=", unsafe.Offsetof(Product{}.Name), "pigeon").And().
+		Condition("=", unsafe.Offsetof(Product{}.Name), "bigpigeon")
+
+	// and brick error
+	_ = toy.Model(&Product{}).Debug().Where("=", unsafe.Offsetof(Product{}.Name), "pigeon").And().
+		Condition("=", unsafe.Offsetof(Detail{}.Data), "bigpigeon")
 }
